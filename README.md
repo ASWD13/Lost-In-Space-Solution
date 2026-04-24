@@ -56,17 +56,7 @@ Presentations are judged first; top 3 submissions are then verified against the 
 └── README.md                      # you are here
 ```
 
-## Dates
 
-| Date | Event |
-|---|---|
-| *TBD*  | Registration opens |
-| *TBD*  | Problem statement final; code freeze on `main` |
-| *TBD*  | Submission deadline |
-| *TBD*  | Presentations + verification runs |
-| *TBD*  | Winners announced |
-
-(Organizers: replace the TBDs before pushing.)
 
 ## Quick links
 
@@ -83,6 +73,6 @@ The organizer-side grader is open-sourced alongside the problem statement for fu
 
 ## Credits
 
-Built by *[organizer name]* for *[event name]*, *[year]*. Basilisk Astrodynamics Framework © University of Colorado AVS Lab.
+Built by *[TakeMe2Space]* for *[Aeon 418]*, *[2026]*. Basilisk Astrodynamics Framework © University of Colorado AVS Lab.
 
 Licensed under [MIT](./LICENSE).
