@@ -39,8 +39,9 @@ GRID_SIDE = 4
 INTEG_DEFAULT = 0.120
 ATTITUDE_DT = 0.05
 SHOT_CADENCE_S = 3.2
-PRESETTLE_S = 0.05
+PRESETTLE_S = 0.10
 POST_HOLD_S = 0.05
+SMEAR_TARGET_DEGPS = 0.02  # Target < 0.05 limit
 OFF_NADIR_SOFT_DEG = 59.8
 SLEW_RATE_DPS_CAP = 1.5
 FOCUS_SCAN_DT = 2.0
@@ -301,7 +302,7 @@ def _assign_boustrophedon_order(targets: List[GridTarget], focus: PassFocus, har
     return ordered
 
 
-def _safe_slew_rate_dps(sc_params: Dict[str, Any]) -> float:
+def _safe_slew_rate_dps(sc_params: Dict[str, Any]) -> Tuple[float, float]:
     """
     Derive a conservative body-rate cap from inertia and the RW momentum buffer.
 
@@ -323,9 +324,9 @@ def _safe_slew_rate_dps(sc_params: Dict[str, Any]) -> float:
     momentum_map = np.linalg.pinv(wheel_axes) @ inertia
     row_norm = max(float(np.linalg.norm(momentum_map[i])) for i in range(momentum_map.shape[0]))
     if row_norm < 1e-12:
-        return SLEW_RATE_DPS_CAP
+        return SLEW_RATE_DPS_CAP, 0.0
     theoretical_limit_dps = math.degrees(h_safe / row_norm)
-    return min(SLEW_RATE_DPS_CAP, theoretical_limit_dps)
+    return min(SLEW_RATE_DPS_CAP, theoretical_limit_dps), row_norm
 
 
 def _build_reachability_map(
@@ -339,7 +340,7 @@ def _build_reachability_map(
     reachable_tiles: List[ReachableTile] = []
     scan_times = np.arange(0.0, t_pass + 1e-9, REACHABILITY_SCAN_DT)
 
-    actual_off_limit = 59.9 if hard_case else off_limit_deg
+    actual_off_limit = 59.4 if hard_case else off_limit_deg
 
     for target in ordered_targets:
         best_off = float("inf")
@@ -464,9 +465,10 @@ def _plan_shots(
     off_limit_deg: float,
     integration_s: float,
     slew_rate_dps: float,
+    row_norm: float,
 ) -> List[PlannedShot]:
     hard_case = focus.centroid_off_deg > 45.0
-    cadence_s = 1.0 if hard_case else SHOT_CADENCE_S
+    cadence_s = 1.0
     by_rank = {tile.target.snake_rank: tile for tile in reachable_tiles}
     remaining = set(by_rank.keys())
     prev_q = np.array([0.0, 0.0, 0.0, 1.0])
@@ -490,7 +492,7 @@ def _plan_shots(
             r_tgt_eci = _ecef_to_eci(_llh_to_ecef(target.lat_deg, target.lon_deg), sample.gmst)
             if hard_case:
                 off = _satellite_nadir_off_nadir_deg(sample.r_eci, r_tgt_eci)
-                if off > 59.9:
+                if off > 59.4:
                     continue
             else:
                 off = _off_nadir_deg(sample.r_eci, r_tgt_eci)
@@ -502,8 +504,18 @@ def _plan_shots(
             slew_time = _quat_dist_deg(prev_q, q_target) / max(slew_rate_dps, 1e-6)
             if hold_start + 1e-9 < prev_free_t + slew_time:
                 continue
-            if hard_case and float(t) + 1e-9 < prev_shot_t + HARD_CASE_MIN_GAP_S:
+
+            min_gap = HARD_CASE_MIN_GAP_S if hard_case else SHOT_CADENCE_S
+            if float(t) + 1e-9 < prev_shot_t + min_gap:
                 continue
+
+            time_avail = hold_start - prev_free_t
+            if time_avail > 1e-6 and row_norm > 0.0:
+                theta_rad = math.radians(_quat_dist_deg(prev_q, q_target))
+                omega_avg = theta_rad / time_avail
+                momentum_est = row_norm * omega_avg
+                if momentum_est > 0.0275:
+                    continue
 
             angle = _quat_dist_deg(prev_q, q_target)
             if not hard_case:
@@ -629,7 +641,7 @@ def plan_imaging(
     hard_case = focus.centroid_off_deg > 45.0
     grid_targets = _build_grid_targets(aoi_polygon_llh, hard_case)
     ordered_targets = _assign_boustrophedon_order(grid_targets, focus, hard_case)
-    slew_rate_dps = _safe_slew_rate_dps(sc_params)
+    slew_rate_dps, row_norm = _safe_slew_rate_dps(sc_params)
     reachable_tiles = _build_reachability_map(
         sat=sat,
         t0=t0,
@@ -657,5 +669,6 @@ def plan_imaging(
         off_limit_deg=off_limit_deg,
         integration_s=integration_s,
         slew_rate_dps=slew_rate_dps,
+        row_norm=row_norm,
     )
     return _build_schedule(shots, integration_s)
