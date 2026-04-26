@@ -14,7 +14,7 @@ kinematically feasible.
 
 For every accepted shot the spacecraft follows a slew-settle-stare profile:
 1. Smoothly SLERP from the previous inertial attitude to the next pointing setpoint
-2. Hold that quaternion for 2.0 s before the shutter opens
+2. Hold that quaternion for 0.1 s before the shutter opens
 3. Keep the same quaternion through the 120 ms shutter window
 
 The command trajectory is exported at exactly 20 Hz (0.05 s spacing) with
@@ -588,7 +588,7 @@ def _build_schedule(shots: List[PlannedShot], integration_s: float) -> Dict[str,
         "target_hints_llh": hints,
         "notes": (
             f"{len(shots)} grid shots, 20 Hz attitude grid, "
-            f"2.0 s inertial settle before every shutter."
+            f"0.1 s inertial settle before every shutter."
         ),
     }
 
@@ -612,7 +612,7 @@ def plan_imaging(
     hints. The target is converted LLH -> ECEF -> ECI at the exact command
     time, and the body-to-inertial quaternion is chosen so the +Z body axis
     points at that inertial target vector. The shutter is only opened after a
-    2.0 s inertial hold, and the same quaternion is kept throughout the full
+    0.1 s inertial hold, and the same quaternion is kept throughout the full
     120 ms integration to protect the smear gate.
     """
     t0 = _parse_iso(pass_start_utc)
